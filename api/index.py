@@ -1,57 +1,59 @@
 from flask import Flask, request
+from flask_cors import CORS
 import requests
 import re
-import json
 
 app = Flask(__name__)
+CORS(app)
 
-# Vercel serverless compatibility
-def app_handler(request):
-    return app(request)
-
-def aotpy_shorten_url(url):
-    if not url:
-        return url
+def aotpy_shorten_url(aotpyurl):
+    if not aotpyurl:
+        return aotpyurl
     try:
-        response = requests.post(
+        aotpyres = requests.post(
             "https://freelyshrink.com/shorten.php",
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Content-Type": "application/x-www-form-urlencoded"
             },
-            data={"long_url": url},
+            data={"long_url": aotpyurl},
             timeout=15
         )
 
-        if "code=" in response.url:
-            code = response.url.split("code=")[1].split("&")[0]
-            return f"https://hosturl.link/{code}"
+        if "code=" in aotpyres.url:
+            aotpycode = aotpyres.url.split("code=")[1].split("&")[0]
+            return f"https://hosturl.link/{aotpycode}"
 
-        match = re.search(r'code=([a-zA-Z0-9]+)', response.text)
-        if match:
-            return f"https://hosturl.link/{match.group(1)}"
+        aotpymatch = re.search(r'code=([a-zA-Z0-9]+)', aotpyres.text)
+        if aotpymatch:
+            return f"https://hosturl.link/{aotpymatch.group(1)}"
 
     except:
         pass
-    return url
 
-@app.route('/api/yt')
-def yt_downloader():
-    link = request.args.get('link')
-    
-    if not link:
-        return json.dumps({
+    return aotpyurl
+
+
+@app.route("/api/yt", methods=["GET"])
+def aotpy_api():
+    aotpylink = request.args.get("link")
+
+    if not aotpylink:
+        return {
             "status": 0,
             "error": "Missing link parameter"
-        }), 400, {'Content-Type': 'application/json'}
+        }, 400
 
-    payload = {
+    aotpypayload = {
         "url": "/media/parse",
-        "data": {"origin": "source", "link": link},
+        "data": {
+            "origin": "source",
+            "link": aotpylink
+        },
         "token": ""
     }
 
-    headers = {
+    aotpyheaders = {
         "User-Agent": "Mozilla/5.0 (Linux; Android)",
         "Accept": "*/*",
         "Content-Type": "application/json",
@@ -60,49 +62,61 @@ def yt_downloader():
     }
 
     try:
-        session = requests.Session()
-        session.get("https://vidssave.com/yt", headers=headers)
-        response = session.post(
+        aotpysession = requests.Session()
+        aotpysession.get("https://vidssave.com/yt", headers=aotpyheaders)
+        aotpyres = aotpysession.post(
             "https://vidssave.com/api/proxy",
-            headers=headers,
-            json=payload,
+            headers=aotpyheaders,
+            json=aotpypayload,
             timeout=20
         )
 
-        data = response.json()
+        aotpydata = aotpyres.json()
 
-        if data.get("status") != 1:
-            return json.dumps({
+        if aotpydata.get("status") != 1:
+            return {
                 "status": 0,
                 "error": "Invalid response from source"
-            }), 500, {'Content-Type': 'application/json'}
+            }, 500
 
-        info = data["data"]
-        output = []
+        aotpyinfo = aotpydata["data"]
+        aotpyout = []
 
-        thumb = aotpy_shorten_url(info.get("thumbnail"))
+        aotpythumb = aotpyinfo.get("thumbnail")
+        aotpythumb = aotpy_shorten_url(aotpythumb)
 
-        for resource in info.get("resources", []):
-            if resource.get("download_mode") == "check_download":
-                output.append({
-                    "quality": resource.get("quality"),
-                    "format": resource.get("format"),
-                    "size": resource.get("size"),
-                    "download": aotpy_shorten_url(resource.get("download_url"))
+        for aotpyrsc in aotpyinfo.get("resources", []):
+            if aotpyrsc.get("download_mode") == "check_download":
+                aotpyout.append({
+                    "quality": aotpyrsc.get("quality"),
+                    "format": aotpyrsc.get("format"),
+                    "size": aotpyrsc.get("size"),
+                    "download": aotpy_shorten_url(aotpyrsc.get("download_url"))
                 })
 
-        return json.dumps({
+        return {
             "status": 1,
             "response": {
-                "title": info.get("title"),
-                "duration": info.get("duration"),
-                "thumbnail": thumb,
-                "data": output
+                "title": aotpyinfo.get("title"),
+                "duration": aotpyinfo.get("duration"),
+                "thumbnail": aotpythumb,
+                "data": aotpyout
             }
-        }), 200, {'Content-Type': 'application/json'}
+        }
 
-    except Exception as e:
-        return json.dumps({
+    except Exception as aotpye:
+        return {
             "status": 0,
-            "error": str(e)
-        }), 500, {'Content-Type': 'application/json'}
+            "error": str(aotpye)
+        }, 500
+
+
+# Vercel के लिए handler function
+def handler(event, context):
+    from flask import Flask
+    import app as flask_app
+    
+    return flask_app.app(event, context)
+
+if __name__ == "__main__":
+    app.run()
